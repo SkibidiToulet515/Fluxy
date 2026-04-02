@@ -27,9 +27,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', name: 'Fluxy API' 
 
 // ── Game files ────────────────────────────────────────────────────────────────
 // Serve the user's game HTML files from the configured GAMES_DIR
-// Default: a "games" folder next to the server. Change GAMES_DIR env var to point
+// Default: the project's "client/UGS Files" folder. Change GAMES_DIR env var to point
 // to wherever you extracted your game files (e.g. "C:\Users\yusof\Downloads\UGS Files")
-const GAMES_DIR = process.env.GAMES_DIR || path.join(__dirname, '../games');
+const GAMES_DIR = process.env.GAMES_DIR || path.join(__dirname, '../client/UGS Files');
 app.use('/games', express.static(GAMES_DIR, {
   setHeaders: (res) => {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
