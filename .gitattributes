@@ -1,1 +1,2 @@
 *.html filter=lfs diff=lfs merge=lfs -text
+Fluxy/client/public/index.html -filter -diff -merge text
