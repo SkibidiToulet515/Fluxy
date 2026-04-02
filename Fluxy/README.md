@@ -29,13 +29,7 @@ node index.js
 
 Open **http://localhost:3001**
 
----
 
-## 🔐 Admin Login
-
-| Username | Password           |
-|----------|--------------------|
-| `admin`  | `fluxy_admin_2024` |
 
 ---
 
