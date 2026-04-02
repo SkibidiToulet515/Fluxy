@@ -1,0 +1,9 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+client/build/
+server/db/fluxy-db.json
+*.log
+.env
+.DS_Store
+server/db/.jwt-secret
