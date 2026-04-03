@@ -225,10 +225,21 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
 .sidebar-collapsed .nav-label,
 .sidebar-collapsed .sidebar-logo-text,
 .sidebar-collapsed .sidebar-user-name,
-.sidebar-collapsed .sidebar-section-title { opacity: 0; width: 0; overflow: hidden; white-space: nowrap; }
+.sidebar-collapsed .sidebar-section-title,
+.sidebar-collapsed .sidebar-stats {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
 
 .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 22px 18px; border-bottom: 1px solid var(--border); text-decoration: none; }
 .sidebar-logo-mark { width: 32px; height: 32px; background: var(--accent); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px var(--accent-glow); }
+.sidebar-logo-img { width: 22px; height: 22px; display: block; }
 .sidebar-logo-text { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
 
 .sidebar-nav { flex: 1; padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
@@ -246,6 +257,31 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
 .nav-icon { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.8; }
 .nav-item.active .nav-icon { opacity: 1; }
 
+.sidebar-stats {
+  margin: 6px 10px 10px;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+}
+.sidebar-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sidebar-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sidebar-stat-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--border); }
 .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-card); }
 .sidebar-user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
@@ -255,16 +291,50 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
 /* Main content */
 .main-content { flex: 1; margin-left: 230px; transition: margin-left 0.3s ease; min-height: 100vh; }
 .main-content.sidebar-collapsed { margin-left: 64px; }
-.main-content.taskbar-mode { margin-left: 0; padding-bottom: 68px; }
+.main-content.taskbar-mode { margin-left: 0; padding-bottom: 92px; }
 
 /* Taskbar */
 .taskbar {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  height: 60px; background: var(--sidebar-bg);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 68px;
+  background: var(--sidebar-bg);
   backdrop-filter: blur(24px);
   border-top: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  z-index: 100; padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 120;
+  padding: 8px 16px;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.35);
+}
+.taskbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 98px;
+}
+.taskbar-logo-img {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+.taskbar-logo-text {
+  font-family: "Syne", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.taskbar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 .taskbar-item {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
@@ -280,6 +350,21 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
 .page-header { margin-bottom: 32px; }
 .page-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
 .page-subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+.hero-logo-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 28px var(--accent-glow);
+}
+.hero-logo-img {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
 
 /* ─── STARS BACKGROUND ──────────────────────────────────────────────────── */
 .stars-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
@@ -364,8 +449,22 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .section-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
 .section-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.section-link { font-size: 13px; color: var(--accent); font-weight: 600; text-decoration: none; }
-.section-link:hover { text-decoration: underline; }
+.section-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.section-link:hover {
+  border-color: var(--border-accent);
+  color: var(--accent);
+  background: var(--bg-card-hover);
+}
 
 /* ─── CHIP / FILTER TABS ────────────────────────────────────────────────── */
 .filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -509,6 +608,8 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Syne', sans-serif; font-weight: 700; line
   .sidebar.mobile-open { transform: translateX(0); }
   .main-content { margin-left: 0 !important; }
   .page { padding: 20px 16px; }
+  .taskbar { gap: 8px; padding: 8px 10px; }
+  .taskbar-logo-text { display: none; }
   .games-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
   .featured-grid { grid-template-columns: 1fr; }
   .chat-sidebar { display: none; }

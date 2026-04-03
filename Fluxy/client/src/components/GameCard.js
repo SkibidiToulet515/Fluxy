@@ -1,36 +1,45 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Icon from './Icon';
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { generateGameThumbnail } from "../utils/gameUtils";
 
-function LazyImage({ src, alt, className }) {
+function LazyImage({ src, alt, className, fallbackName }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const imgRef = useRef(null);
+  const fallback = useMemo(() => generateGameThumbnail(fallbackName || alt || "Game"), [fallbackName, alt]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting && imgRef.current) { imgRef.current.src = src; } },
-      { rootMargin: '100px' }
+      ([entry]) => {
+        if (entry.isIntersecting && imgRef.current) {
+          imgRef.current.src = src;
+        }
+      },
+      { rootMargin: "100px" }
     );
-    if (imgRef.current) observer.observe(imgRef.current);
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
     return () => observer.disconnect();
   }, [src]);
 
   if (error || !src) {
-    return (
-      <div className="game-thumb-placeholder">
-        <Icon name="gamepad" size={40} style={{ color: 'var(--text-muted)' }} />
-      </div>
-    );
+    return <img src={fallback} alt={alt} className={className} loading="lazy" />;
   }
 
   return (
     <>
-      {!loaded && <div className="game-thumb-placeholder"><div className="spinner" /></div>}
+      {!loaded && (
+        <div className="game-thumb-placeholder">
+          <div className="spinner" />
+        </div>
+      )}
       <img
         ref={imgRef}
         alt={alt}
         className={className}
-        style={{ display: loaded ? 'block' : 'none' }}
+        style={{ display: loaded ? "block" : "none" }}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
       />
@@ -38,14 +47,16 @@ function LazyImage({ src, alt, className }) {
   );
 }
 
-export default function GameCard({ game, onClick, size = 'normal' }) {
+export default function GameCard({ game, onClick }) {
+  const title = game.title || game.name || "Untitled";
+
   return (
     <div className="game-card animate-up" onClick={() => onClick(game)}>
-      <LazyImage src={game.thumbnail} alt={game.title} className="game-thumb" />
+      <LazyImage src={game.thumbnail} alt={title} className="game-thumb" fallbackName={title} />
       {game.featured && <span className="game-badge badge-featured">Featured</span>}
-      {game.trending && !game.featured && <span className="game-badge badge-trending">🔥 Hot</span>}
+      {game.trending && !game.featured && <span className="game-badge badge-trending">Hot</span>}
       <div className="game-info">
-        <div className="game-title">{game.title}</div>
+        <div className="game-title">{title}</div>
         <div className="game-desc">{game.description}</div>
         <div className="game-meta">
           <span className="game-category">{game.category}</span>

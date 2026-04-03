@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -26,10 +27,26 @@ app.use('/api/messages', require('./routes/messages'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', name: 'Fluxy API' }));
 
 // ── Game files ────────────────────────────────────────────────────────────────
-// Serve the user's game HTML files from the configured GAMES_DIR
-// Default: the project's "client/UGS Files" folder. Change GAMES_DIR env var to point
-// to wherever you extracted your game files (e.g. "C:\Users\yusof\Downloads\UGS Files")
-const GAMES_DIR = process.env.GAMES_DIR || path.join(__dirname, '../client/UGS Files');
+function isDirectory(dirPath) {
+  try {
+    return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+const gameDirCandidates = [
+  process.env.GAMES_DIR,
+  path.join(__dirname, '../client/UGS Files'),
+  path.join(process.cwd(), 'client/UGS Files'),
+  path.join(__dirname, '../games'),
+].filter(Boolean);
+
+const GAMES_DIR = gameDirCandidates.find(isDirectory) || gameDirCandidates[gameDirCandidates.length - 1];
+
+if (!isDirectory(GAMES_DIR)) {
+  console.warn(`Game directory does not exist: ${GAMES_DIR}`);
+}
 app.use('/games', express.static(GAMES_DIR, {
   setHeaders: (res) => {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');

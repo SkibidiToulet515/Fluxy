@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Fluxy - Premium Gaming & Tools Platform",
   "scripts": {
-    "install:all": "cd server && npm install && cd ../client && npm install",
+    "install:all": "cd server && npm install && cd ../client && npm install --ignore-scripts",
     "build": "cd client && npm run build",
     "start": "cd server && node index.js",
     "dev:server": "cd server && npm run dev",
