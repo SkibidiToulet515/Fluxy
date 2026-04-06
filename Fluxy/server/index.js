@@ -23,6 +23,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/games', require('./routes/games'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/proxy', require('./routes/proxy'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', name: 'Fluxy API' }));
 
