@@ -38,7 +38,8 @@ function timeAgo(timestamp) {
 }
 
 function buildProxyUrl(targetUrl, engine) {
-  return `/api/proxy?engine=${encodeURIComponent(engine)}&url=${encodeURIComponent(targetUrl)}`;
+  const selectedEngine = engine === "scramjet" ? "scramjet" : "uv";
+  return `/proxy/launch/${selectedEngine}?url=${encodeURIComponent(targetUrl)}`;
 }
 
 export default function Proxy() {
@@ -175,7 +176,6 @@ export default function Proxy() {
           title="Proxy Browser"
           style={{ flex: 1, border: "none", width: "100%" }}
           allow="fullscreen; clipboard-write; autoplay"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups"
         />
       </div>
     );

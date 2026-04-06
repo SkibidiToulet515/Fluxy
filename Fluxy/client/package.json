@@ -11,8 +11,8 @@
     "react-scripts": "5.0.1"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build"
+    "start": "node -e \"require(process.cwd() + '/node_modules/react-scripts/scripts/start')\"",
+    "build": "node -e \"require(process.cwd() + '/node_modules/react-scripts/scripts/build')\""
   },
   "proxy": "http://localhost:3001",
   "browserslist": {
