@@ -1,120 +1,122 @@
 # Fluxy
 
-Fluxy is a self-hosted gaming platform for running and organizing your own HTML game library.
-It has a React frontend, a Node/Express backend, Socket.IO chat, and admin tooling.
+Fluxy is a gaming platform for launching and organizing your HTML game library, with auth, chat, proxy tools, and admin management.
 
 ## What The Site Is About
 
-- Launch local HTML games from one place
-- Manage game metadata in JSON
-- Track play counts and usage
-- Provide chat rooms and admin tools for your community
-
-By default, games are served from:
-`Fluxy/client/UGS Files`
+- Launch your game library from one dashboard
+- Manage game metadata from admin tools
+- Track game plays and activity stats
+- Handle users, auth, and content from a cloud database
 
 ## Stack
 
 - Frontend: React (Create React App)
 - Backend: Node.js + Express
 - Realtime: Socket.IO
-- Data: JSON files in `server/db`
+- Cloud DB: Firebase Firestore (with local JSON fallback for development)
 
-## Local Start Tutorial
+## Local Start
 
-### 1. Open the project folder
+### 1. Open the project
 
 ```powershell
-cd "C:\Users\yusof\Downloads\fluxy\Fluxy"
+cd "C:\Users\yusof\Downloads\Chibi Clash\fluxy_clean\Fluxy"
 ```
 
-### 2. Install dependencies
+### 2. Install all dependencies
 
 ```powershell
 npm run install:all
 ```
 
-If client install fails with a `core-js` postinstall/path error, run:
-
-```powershell
-cd client
-npm install --ignore-scripts
-cd ..
-```
-
 ### 3. Start backend (Terminal 1)
 
 ```powershell
-cd "C:\Users\yusof\Downloads\fluxy\Fluxy\server"
-node index.js
+npm run dev:server
 ```
 
-Backend:
-`http://localhost:3001`
-
-Health check:
+Backend health:
 `http://localhost:3001/api/health`
 
 ### 4. Start frontend (Terminal 2)
 
 ```powershell
-cd "C:\Users\yusof\Downloads\fluxy\Fluxy\client"
-node_modules\.bin\react-scripts.cmd start
+npm run dev:client
 ```
 
 Frontend:
 `http://localhost:3000`
 
-## Game Files Path
+## Database Modes
 
-Default game path used by the server:
-`../client/UGS Files`
+### Firestore mode (recommended)
 
-To override it:
+Set these in `server/.env` (see `server/.env.example`):
 
-Command Prompt:
-
-```cmd
-set GAMES_DIR=C:\path\to\your\games
+```env
+FIRESTORE_ENABLED=true
+JWT_SECRET=replace-with-a-strong-secret
 ```
 
-PowerShell:
+When Firestore is enabled, Fluxy stores users, games, bookmarklets, bypasses, messages, and game stats in Firestore.
+
+### Local fallback mode
+
+If Firestore is not enabled/configured, Fluxy uses:
+`server/db/fluxy-db.json`
+
+## Firebase Hosting + Functions Deployment
+
+### 1. Build frontend
 
 ```powershell
-$env:GAMES_DIR = "C:\path\to\your\games"
+npm run build
 ```
 
-Then restart the backend.
+### 2. Configure Firebase project
 
-## Project Structure
+1. Install Firebase CLI
+2. Create or choose a Firebase project
+3. Copy `.firebaserc.example` to `.firebaserc`
+4. Set your project id in `.firebaserc`
 
-```text
-Fluxy/
-  client/
-    public/
-    src/
-    UGS Files/
-  server/
-    db/
-    middleware/
-    routes/
-    index.js
+### 3. Enable Firestore
+
+Enable Firestore in your Firebase console.
+
+### 4. Set server environment values
+
+Create `server/.env` with at least:
+
+```env
+FIRESTORE_ENABLED=true
+JWT_SECRET=replace-with-a-strong-secret
 ```
 
-## Hosting Notes
+Optional:
 
-Build frontend for production:
+```env
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=fluxy_admin_2024
+```
+
+### 5. Deploy
 
 ```powershell
-cd client
-node_modules\.bin\react-scripts.cmd build
+npm run deploy:firebase
 ```
 
-Start backend for production:
+This deploys:
 
-```powershell
-cd ../server
-node index.js
-```
+- Hosting from `client/build`
+- Functions from `server` (HTTP function `api`)
+- Firestore rules from `firestore.rules`
 
-The Express server serves both API routes and the built React app.
+## Notes
+
+- `firebase.json` already rewrites `/api/**` and required backend paths to the `api` function.
+- Firestore direct client access is blocked by default rules; data is managed through your backend routes.
+- Game files are served from:
+  - `client/UGS Files` locally
+  - For Firebase, host game assets in a public/CDN-accessible location or keep using backend-served paths.

@@ -4,12 +4,18 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/:room', auth, (req, res) => {
-  const msgs = DB.getAll('messages')
-    .filter(m => m.room === req.params.room)
-    .sort((a, b) => a.created_at - b.created_at)
-    .slice(-100);
-  res.json(msgs);
+router.get('/:room', auth, async (req, res) => {
+  try {
+    const room = String(req.params.room || '').trim().toLowerCase();
+    const rows = await DB.getAll('messages');
+    const msgs = rows
+      .filter((m) => String(m.room || '').trim().toLowerCase() === room)
+      .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+      .slice(-100);
+    res.json(msgs);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load messages', details: error.message });
+  }
 });
 
 module.exports = router;

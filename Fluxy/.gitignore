@@ -8,3 +8,5 @@ server/db/fluxy-db.json
 .DS_Store
 server/db/.jwt-secret
 server/engines/
+.firebaserc
+.firebase/

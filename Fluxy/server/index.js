@@ -191,17 +191,25 @@ io.on('connection', (socket) => {
   });
 
   socket.on('message', ({ content, room }) => {
-    if (!socket.user || !content?.trim()) return;
-    const msg = {
-      id: uuidv4(),
-      user_id: socket.user.id,
-      username: socket.user.username,
-      content: content.trim().substring(0, 500),
-      room: room || 'general',
-      created_at: Math.floor(Date.now() / 1000)
-    };
-    DB.insert('messages', msg);
-    io.to(msg.room).emit('message', msg);
+    (async () => {
+      if (!socket.user || !content?.trim()) return;
+      const msg = {
+        id: uuidv4(),
+        user_id: socket.user.id,
+        username: socket.user.username,
+        content: content.trim().substring(0, 500),
+        room: room || 'general',
+        created_at: Math.floor(Date.now() / 1000)
+      };
+
+      try {
+        await DB.insert('messages', msg);
+      } catch (error) {
+        console.warn(`Failed to persist message: ${error.message}`);
+      }
+
+      io.to(msg.room).emit('message', msg);
+    })();
   });
 
   socket.on('disconnect', () => {
@@ -220,5 +228,26 @@ server.on('upgrade', (req, socket, head) => {
   }
 });
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Fluxy server running on :${PORT}`));
+function startServer() {
+  DB.init().catch((error) => {
+    console.warn(`Database initialization warning: ${error.message}`);
+  });
+
+  const PORT = process.env.PORT || 3001;
+  return server.listen(PORT, () => console.log(`Fluxy server running on :${PORT}`));
+}
+
+try {
+  const { onRequest } = require('firebase-functions/v2/https');
+  module.exports.api = onRequest({ cors: true }, app);
+} catch {
+  // firebase-functions is optional for local-only runs.
+}
+
+module.exports.app = app;
+module.exports.server = server;
+module.exports.startServer = startServer;
+
+if (require.main === module) {
+  startServer();
+}

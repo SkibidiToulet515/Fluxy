@@ -1,0 +1,62 @@
+{
+  "functions": {
+    "source": "server"
+  },
+  "hosting": {
+    "public": "client/build",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "function": "api"
+      },
+      {
+        "source": "/socket.io/**",
+        "function": "api"
+      },
+      {
+        "source": "/proxy/**",
+        "function": "api"
+      },
+      {
+        "source": "/uv/**",
+        "function": "api"
+      },
+      {
+        "source": "/epoxy/**",
+        "function": "api"
+      },
+      {
+        "source": "/baremux/**",
+        "function": "api"
+      },
+      {
+        "source": "/scram/**",
+        "function": "api"
+      },
+      {
+        "source": "/scramjet/**",
+        "function": "api"
+      },
+      {
+        "source": "/libcurl/**",
+        "function": "api"
+      },
+      {
+        "source": "/games/**",
+        "function": "api"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

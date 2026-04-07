@@ -8,7 +8,8 @@
     "start": "call .\\scripts\\start-server.cmd",
     "dev:server": "call .\\scripts\\dev-server.cmd",
     "dev:client": "call .\\scripts\\start-client.cmd",
-    "setup": "npm run install:all && npm run build"
+    "setup": "npm run install:all && npm run build",
+    "deploy:firebase": "npm run build && firebase deploy --only hosting,functions,firestore:rules"
   },
   "engines": {
     "node": ">=18.0.0"
