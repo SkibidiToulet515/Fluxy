@@ -1,13 +1,15 @@
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const DB = require("../db/database");
 const { adminAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
-const CACHE_TTL_MS = 15_000;
-let gamesCache = null;
-let gamesCacheAt = 0;
+// Single source of truth for playable games.
+const GAMES_JSON_PATH = path.join(__dirname, "../db/games.json");
+let GAME_CACHE = null;
 
 function toStringSafe(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -23,79 +25,84 @@ function parsePositiveInt(raw, fallback, min = 1, max = Number.MAX_SAFE_INTEGER)
   return Math.max(min, Math.min(max, parsed));
 }
 
-function parseNonNegativeInt(raw, fallback = 0) {
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
-  return parsed;
-}
-
-function buildPlayUrl(game) {
-  const explicitPlayUrl = toStringSafe(game.playUrl);
-  if (explicitPlayUrl) return explicitPlayUrl;
-
-  const externalUrl = toStringSafe(game.url);
-  if (externalUrl) return externalUrl;
-
-  const filename = toStringSafe(game.filename) || toStringSafe(game["original file name"]);
-  if (filename) {
-    return `/games/${encodeURIComponent(filename)}`;
+function readGamesJson() {
+  if (!fs.existsSync(GAMES_JSON_PATH)) {
+    return [];
   }
 
-  return "";
+  try {
+    const raw = JSON.parse(fs.readFileSync(GAMES_JSON_PATH, "utf8"));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
 }
 
-function normalizeGame(rawGame, statsMap) {
-  const name = toStringSafe(rawGame.name) || toStringSafe(rawGame.title) || "Game";
-  const playCountFromGame = parseNonNegativeInt(rawGame.play_count, 0);
-  const playCountFromStats = parseNonNegativeInt(statsMap.get(rawGame.id), 0);
-  const playCount = Math.max(playCountFromGame, playCountFromStats);
-
-  return {
-    id: rawGame.id,
-    name,
-    title: name,
-    filename: toStringSafe(rawGame.filename) || toStringSafe(rawGame["original file name"]),
-    playUrl: buildPlayUrl(rawGame),
-    url: toStringSafe(rawGame.url),
-    description: toStringSafe(rawGame.description),
-    thumbnail: toStringSafe(rawGame.thumbnail),
-    category: toStringSafe(rawGame.category),
-    featured: toBoolean(rawGame.featured),
-    trending: toBoolean(rawGame.trending),
-    play_count: playCount,
-  };
+function writeGamesJson(games) {
+  fs.writeFileSync(GAMES_JSON_PATH, JSON.stringify(games, null, 2), "utf8");
 }
 
-async function getStatsMap() {
+function resolveEntryId(entry, index) {
+  const existing = toStringSafe(entry?.id);
+  return existing || `gn-${index}`;
+}
+
+async function buildStatsMap() {
   const rows = await DB.getAll("game_stats");
   const map = new Map();
-  for (const row of rows) {
+  for (const row of rows || []) {
     const id = toStringSafe(row?.id);
     if (!id) continue;
-    map.set(id, parseNonNegativeInt(row.plays, 0));
+    map.set(id, parsePositiveInt(row.plays, 0, 0));
   }
   return map;
 }
 
-async function getGames({ forceRefresh = false } = {}) {
-  const now = Date.now();
-  if (!forceRefresh && gamesCache && now - gamesCacheAt < CACHE_TTL_MS) {
-    return gamesCache;
-  }
+function normalizeGame(entry, index, statsMap) {
+  const id = resolveEntryId(entry, index);
+  const name = toStringSafe(entry.name) || toStringSafe(entry.title) || `Game ${index + 1}`;
+  const filename = toStringSafe(entry["original file name"]) || toStringSafe(entry.filename);
+  const configuredPlayUrl = toStringSafe(entry.playUrl) || toStringSafe(entry.url);
+  const playUrl = configuredPlayUrl || (filename ? `/games/${encodeURIComponent(filename)}` : "");
+  const storedPlayCount = parsePositiveInt(entry.play_count, 0, 0);
+  const playCount = statsMap.has(id) ? statsMap.get(id) : storedPlayCount;
 
-  const [rawGames, statsMap] = await Promise.all([DB.getAll("games"), getStatsMap()]);
-  const normalized = rawGames
-    .filter((game) => toStringSafe(game.id))
-    .map((game) => normalizeGame(game, statsMap));
-
-  gamesCache = normalized;
-  gamesCacheAt = now;
-  return normalized;
+  return {
+    id,
+    name,
+    title: name,
+    filename,
+    playUrl,
+    url: toStringSafe(entry.url),
+    description: toStringSafe(entry.description),
+    thumbnail: toStringSafe(entry.thumbnail),
+    category: toStringSafe(entry.category),
+    featured: toBoolean(entry.featured),
+    trending: toBoolean(entry.trending),
+    play_count: playCount,
+  };
 }
 
-function invalidateGamesCache() {
-  gamesCache = null;
-  gamesCacheAt = 0;
+async function loadGames() {
+  const rawGames = readGamesJson();
+  const statsMap = await buildStatsMap();
+  return rawGames.map((entry, index) => normalizeGame(entry, index, statsMap));
+}
+
+async function getGames() {
+  if (!GAME_CACHE) {
+    GAME_CACHE = await loadGames();
+  }
+  return GAME_CACHE;
+}
+
+async function refreshGameCache() {
+  GAME_CACHE = null;
+  return getGames();
+}
+
+function findRawGameIndex(rawGames, id) {
+  return rawGames.findIndex((entry, index) => resolveEntryId(entry, index) === id);
 }
 
 router.get("/", async (req, res) => {
@@ -142,12 +149,14 @@ router.post("/:id/play", async (req, res) => {
       return;
     }
 
-    await Promise.all([
-      DB.increment("game_stats", gameId, "plays"),
-      DB.increment("games", gameId, "play_count"),
-    ]);
+    const stats = await DB.findOne("game_stats", { id: gameId });
+    if (stats) {
+      await DB.update("game_stats", gameId, { plays: (stats.plays || 0) + 1 });
+    } else {
+      await DB.insert("game_stats", { id: gameId, plays: 1 });
+    }
 
-    invalidateGamesCache();
+    GAME_CACHE = null;
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to track game play", details: error.message });
@@ -157,7 +166,7 @@ router.post("/:id/play", async (req, res) => {
 router.get("/stats", async (req, res) => {
   try {
     const stats = await DB.getAll("game_stats");
-    res.json(stats);
+    res.json(stats || []);
   } catch (error) {
     res.status(500).json({ error: "Failed to load stats", details: error.message });
   }
@@ -173,30 +182,37 @@ router.post("/", adminAuth, async (req, res) => {
       res.status(400).json({ error: "Title is required." });
       return;
     }
-
     if (!filename && !url) {
       res.status(400).json({ error: "Provide either a local filename or URL." });
       return;
     }
 
+    const rawGames = readGamesJson();
     const id = `gn-${crypto.randomBytes(6).toString("hex")}`;
     const record = {
       id,
       name: title,
       title,
-      filename,
-      url,
       description: toStringSafe(req.body?.description),
       thumbnail: toStringSafe(req.body?.thumbnail),
       category: toStringSafe(req.body?.category),
       featured: toBoolean(req.body?.featured),
       trending: toBoolean(req.body?.trending),
-      play_count: parseNonNegativeInt(req.body?.play_count, 0),
+      play_count: parsePositiveInt(req.body?.play_count, 0, 0),
     };
 
-    await DB.insert("games", record);
-    invalidateGamesCache();
-    const games = await getGames({ forceRefresh: true });
+    if (filename) {
+      record["original file name"] = filename;
+      record.filename = filename;
+    }
+    if (url) {
+      record.url = url;
+    }
+
+    rawGames.push(record);
+    writeGamesJson(rawGames);
+
+    const games = await refreshGameCache();
     res.status(201).json(games.find((game) => game.id === id));
   } catch (error) {
     res.status(500).json({ error: "Failed to create game", details: error.message });
@@ -206,63 +222,57 @@ router.post("/", adminAuth, async (req, res) => {
 router.put("/:id", adminAuth, async (req, res) => {
   try {
     const gameId = String(req.params.id || "").trim();
-    if (!gameId) {
-      res.status(400).json({ error: "Invalid game id." });
-      return;
-    }
-
-    const current = await DB.findOne("games", { id: gameId });
-    if (!current) {
+    const rawGames = readGamesJson();
+    const index = findRawGameIndex(rawGames, gameId);
+    if (index < 0) {
       res.status(404).json({ error: "Game not found." });
       return;
     }
 
-    const nextTitle = toStringSafe(req.body?.title) || toStringSafe(req.body?.name) || current.title || current.name;
-    const nextFilename = Object.prototype.hasOwnProperty.call(req.body || {}, "filename")
-      ? toStringSafe(req.body?.filename)
-      : (toStringSafe(current.filename) || toStringSafe(current["original file name"]));
-    const nextUrl = Object.prototype.hasOwnProperty.call(req.body || {}, "url")
-      ? toStringSafe(req.body?.url)
-      : toStringSafe(current.url);
-
-    if (!nextTitle) {
-      res.status(400).json({ error: "Title is required." });
-      return;
+    const entry = { ...rawGames[index] };
+    const nextName = toStringSafe(req.body?.title) || toStringSafe(req.body?.name);
+    if (nextName) {
+      entry.name = nextName;
+      entry.title = nextName;
     }
 
-    if (!nextFilename && !nextUrl) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "filename") || Object.prototype.hasOwnProperty.call(req.body || {}, "original file name")) {
+      const nextFilename = toStringSafe(req.body?.filename) || toStringSafe(req.body?.["original file name"]);
+      if (nextFilename) {
+        entry["original file name"] = nextFilename;
+        entry.filename = nextFilename;
+      } else {
+        delete entry["original file name"];
+        delete entry.filename;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "url") || Object.prototype.hasOwnProperty.call(req.body || {}, "playUrl")) {
+      const nextUrl = toStringSafe(req.body?.url) || toStringSafe(req.body?.playUrl);
+      if (nextUrl) {
+        entry.url = nextUrl;
+      } else {
+        delete entry.url;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "description")) entry.description = toStringSafe(req.body.description);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "thumbnail")) entry.thumbnail = toStringSafe(req.body.thumbnail);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "category")) entry.category = toStringSafe(req.body.category);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "featured")) entry.featured = toBoolean(req.body.featured);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "trending")) entry.trending = toBoolean(req.body.trending);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "play_count")) entry.play_count = parsePositiveInt(req.body.play_count, 0, 0);
+
+    const filename = toStringSafe(entry["original file name"]) || toStringSafe(entry.filename);
+    const url = toStringSafe(entry.url);
+    if (!filename && !url) {
       res.status(400).json({ error: "A game must have either a filename or URL." });
       return;
     }
 
-    const updates = {
-      name: nextTitle,
-      title: nextTitle,
-      filename: nextFilename,
-      url: nextUrl,
-      description: Object.prototype.hasOwnProperty.call(req.body || {}, "description")
-        ? toStringSafe(req.body?.description)
-        : current.description,
-      thumbnail: Object.prototype.hasOwnProperty.call(req.body || {}, "thumbnail")
-        ? toStringSafe(req.body?.thumbnail)
-        : current.thumbnail,
-      category: Object.prototype.hasOwnProperty.call(req.body || {}, "category")
-        ? toStringSafe(req.body?.category)
-        : current.category,
-      featured: Object.prototype.hasOwnProperty.call(req.body || {}, "featured")
-        ? toBoolean(req.body?.featured)
-        : !!current.featured,
-      trending: Object.prototype.hasOwnProperty.call(req.body || {}, "trending")
-        ? toBoolean(req.body?.trending)
-        : !!current.trending,
-      play_count: Object.prototype.hasOwnProperty.call(req.body || {}, "play_count")
-        ? parseNonNegativeInt(req.body?.play_count, parseNonNegativeInt(current.play_count, 0))
-        : parseNonNegativeInt(current.play_count, 0),
-    };
-
-    await DB.update("games", gameId, updates);
-    invalidateGamesCache();
-    const games = await getGames({ forceRefresh: true });
+    rawGames[index] = entry;
+    writeGamesJson(rawGames);
+    const games = await refreshGameCache();
     res.json(games.find((game) => game.id === gameId));
   } catch (error) {
     res.status(500).json({ error: "Failed to update game", details: error.message });
@@ -272,14 +282,17 @@ router.put("/:id", adminAuth, async (req, res) => {
 router.delete("/:id", adminAuth, async (req, res) => {
   try {
     const gameId = String(req.params.id || "").trim();
-    const deleted = await DB.delete("games", gameId);
-    if (!deleted) {
+    const rawGames = readGamesJson();
+    const index = findRawGameIndex(rawGames, gameId);
+    if (index < 0) {
       res.status(404).json({ error: "Game not found." });
       return;
     }
 
+    rawGames.splice(index, 1);
+    writeGamesJson(rawGames);
     await DB.delete("game_stats", gameId);
-    invalidateGamesCache();
+    await refreshGameCache();
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete game", details: error.message });

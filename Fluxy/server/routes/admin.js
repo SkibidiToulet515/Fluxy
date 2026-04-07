@@ -1,6 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const DB = require('../db/database');
+const { getGames } = require('./games');
 const { adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -79,16 +80,15 @@ router.delete('/bypasses/:id', adminAuth, async (req, res) => {
 
 router.get('/stats', adminAuth, async (req, res) => {
   try {
-    const [games, usersCount, gamesCount, messagesCount] = await Promise.all([
-      DB.getAll('games'),
+    const [games, usersCount, messagesCount] = await Promise.all([
+      getGames(),
       DB.count('users'),
-      DB.count('games'),
       DB.count('messages'),
     ]);
 
     res.json({
       users: usersCount,
-      games: gamesCount,
+      games: games.length,
       messages: messagesCount,
       topGames: games
         .sort((a, b) => (b.play_count || 0) - (a.play_count || 0))
