@@ -1,4 +1,3 @@
-Fluxy
 Fluxy is a self-hosted gaming platform for running and organizing your own HTML game library. It has a React frontend, a Node/Express backend, Socket.IO chat, and admin tooling.
 
 What The Site Is About
