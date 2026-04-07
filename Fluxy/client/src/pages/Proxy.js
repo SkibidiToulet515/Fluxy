@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { useApp } from "../contexts/AppContext";
 import Icon from "../components/Icon";
+import { getBackendOrigin } from "../utils/gameUtils";
 
 const SEARCH_ENGINES = {
   duckduckgo: {
@@ -39,7 +40,8 @@ function timeAgo(timestamp) {
 
 function buildProxyUrl(targetUrl, engine) {
   const selectedEngine = engine === "scramjet" ? "scramjet" : "uv";
-  return `/proxy/launch/${selectedEngine}?url=${encodeURIComponent(targetUrl)}`;
+  const backendOrigin = getBackendOrigin();
+  return `${backendOrigin}/proxy/launch/${selectedEngine}?url=${encodeURIComponent(targetUrl)}`;
 }
 
 export default function Proxy() {

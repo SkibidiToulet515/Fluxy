@@ -35,19 +35,6 @@ function AppInner() {
       )}
 
       <div className={`main-content${!isTaskbar && sidebarCollapsed ? ' sidebar-collapsed' : ''}${isTaskbar ? ' taskbar-mode' : ''}`}>
-        {/* Mobile header */}
-        {!isTaskbar && (
-          <div style={{
-            display: 'none',
-            '@media(max-width:768px)': { display: 'flex' },
-            alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 16px', borderBottom: '1px solid var(--border)',
-            background: 'var(--sidebar-bg)', backdropFilter: 'blur(20px)',
-            position: 'sticky', top: 0, zIndex: 50
-          }}>
-          </div>
-        )}
-
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/games" element={<Games />} />
@@ -67,7 +54,7 @@ function AppInner() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppProvider>
         <AppInner />
       </AppProvider>

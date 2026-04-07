@@ -73,6 +73,14 @@ export function getBackendOrigin() {
   }
 
   const { protocol, hostname, port, origin } = window.location;
+
+  // GitHub/Codespaces-style forwarded hosts:
+  //   <workspace>-3000.app.github.dev (frontend)
+  //   <workspace>-3001.app.github.dev (backend)
+  if (/-3000\./.test(hostname)) {
+    return `${protocol}//${hostname.replace(/-3000\./, "-3001.")}`;
+  }
+
   if (port === "3000") {
     return `${protocol}//${hostname}:3001`;
   }

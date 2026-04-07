@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useApp } from '../contexts/AppContext';
 import Icon from '../components/Icon';
+import { getBackendOrigin } from '../utils/gameUtils';
 
 const ROOMS = [
   { id: 'general', label: 'General', desc: 'Main chat room' },
@@ -13,6 +14,23 @@ const ROOMS = [
 function formatTime(ts) {
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function resolveSocketUrl(apiBaseUrl) {
+  const explicitSocketUrl = (process.env.REACT_APP_SOCKET_URL || '').trim();
+  if (explicitSocketUrl) {
+    return explicitSocketUrl;
+  }
+
+  if (apiBaseUrl && /^https?:\/\//i.test(apiBaseUrl)) {
+    try {
+      return new URL(apiBaseUrl).origin;
+    } catch {
+      return getBackendOrigin();
+    }
+  }
+
+  return getBackendOrigin();
 }
 
 export default function Chat() {
@@ -36,7 +54,12 @@ export default function Chat() {
   // Socket connection
   useEffect(() => {
     if (!user || !token) return;
-    const s = io('/', { transports: ['websocket', 'polling'] });
+    const socketUrl = resolveSocketUrl(API.defaults.baseURL);
+    const s = io(socketUrl, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      timeout: 10000,
+    });
     s.on('connect', () => {
       setConnected(true);
       s.emit('auth', token);
@@ -44,6 +67,7 @@ export default function Chat() {
     s.on('auth_ok', () => {
       s.emit('join_room', room);
     });
+    s.on('connect_error', () => setConnected(false));
     s.on('message', (msg) => {
       setMessages(prev => {
         if (prev.find(m => m.id === msg.id)) return prev;
@@ -51,10 +75,13 @@ export default function Chat() {
       });
     });
     s.on('online_count', setOnlineCount);
-    s.on('disconnect', () => setConnected(false));
+    s.on('disconnect', () => {
+      setConnected(false);
+      setOnlineCount(0);
+    });
     setSocket(s);
     return () => s.disconnect();
-  }, [user, token]); // eslint-disable-line
+  }, [user, token, API]);
 
   // Switch rooms
   useEffect(() => {
