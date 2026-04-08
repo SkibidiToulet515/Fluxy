@@ -91,6 +91,18 @@ function isHttpUrl(value) {
   }
 }
 
+function isGenericFaviconHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return (
+    host === "google.com" ||
+    host.endsWith(".google.com") ||
+    host.endsWith(".googleusercontent.com") ||
+    host.endsWith(".gstatic.com") ||
+    host === "googletagmanager.com" ||
+    host.endsWith(".googletagmanager.com")
+  );
+}
+
 function encodeGamesPath(filePath) {
   const normalized = toStringSafe(filePath).replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized) return "";
@@ -174,16 +186,10 @@ function extractThumbnailReferenceFromHtml(html) {
   const baseHref = firstMatch(html, [/<base[^>]+href\s*=\s*["']([^"']+)["']/i]);
   if (isHttpUrl(baseHref)) {
     try {
-      return new URL("favicon.ico", baseHref).toString();
-    } catch {
-      // fall through
-    }
-  }
-
-  const absoluteRef = firstMatch(html, [/(https?:\/\/[^\s"'<>]+)/i]);
-  if (isHttpUrl(absoluteRef)) {
-    try {
-      return `${new URL(absoluteRef).origin}/favicon.ico`;
+      const base = new URL(baseHref);
+      if (!isGenericFaviconHost(base.hostname)) {
+        return new URL("favicon.ico", base).toString();
+      }
     } catch {
       // fall through
     }
@@ -202,6 +208,19 @@ function normalizeThumbnailReference(reference, filename) {
   }
 
   if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      const pathName = parsed.pathname.toLowerCase();
+      const externalLooksLikeFavicon = /\/favicon(?:\.[a-z0-9]+)?$/i.test(pathName) || /favicon/i.test(pathName);
+      if (isGenericFaviconHost(parsed.hostname)) {
+        return "";
+      }
+      if (externalLooksLikeFavicon) {
+        return "";
+      }
+    } catch {
+      return "";
+    }
     return raw;
   }
 
@@ -245,7 +264,11 @@ function normalizeThumbnailReference(reference, filename) {
 function resolveThumbnailFromUrl(url) {
   if (!isHttpUrl(url)) return "";
   try {
-    return `${new URL(url).origin}/favicon.ico`;
+    const parsed = new URL(url);
+    if (isGenericFaviconHost(parsed.hostname)) {
+      return "";
+    }
+    return `${parsed.origin}/favicon.ico`;
   } catch {
     return "";
   }
@@ -306,9 +329,6 @@ function resolveGameThumbnail(filename, configuredUrl, gameName, gameId) {
     resolved = normalizeThumbnailReference(reference, filename);
   }
 
-  if (!resolved) {
-    resolved = resolveThumbnailFromUrl(configuredUrl);
-  }
   if (!resolved) {
     resolved = buildFallbackThumbnail(gameName, gameId, filename);
   }
