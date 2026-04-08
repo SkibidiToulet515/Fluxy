@@ -6,6 +6,7 @@
     "install:all": "npm --prefix server install --ignore-scripts && npm --prefix client install --ignore-scripts",
     "build": "call .\\scripts\\build-client.cmd",
     "start": "call .\\scripts\\start-server.cmd",
+    "dev": "call .\\scripts\\dev-all.cmd",
     "dev:server": "call .\\scripts\\dev-server.cmd",
     "dev:client": "call .\\scripts\\start-client.cmd",
     "setup": "npm run install:all && npm run build",
