@@ -9,6 +9,25 @@ const router = express.Router();
 
 // Single source of truth for playable games.
 const GAMES_JSON_PATH = path.join(__dirname, "../db/games.json");
+const MAX_THUMBNAIL_SCAN_BYTES = 220 * 1024;
+const THUMBNAIL_CACHE = new Map();
+
+function isDirectory(dirPath) {
+  try {
+    return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+const gameDirCandidates = [
+  process.env.GAMES_DIR,
+  path.join(__dirname, "../../client/UGS Files"),
+  path.join(process.cwd(), "client/UGS Files"),
+  path.join(__dirname, "../../games"),
+].filter(Boolean);
+
+const GAMES_DIR = gameDirCandidates.find(isDirectory) || gameDirCandidates[gameDirCandidates.length - 1];
 let GAME_CACHE = null;
 
 function toStringSafe(value) {
@@ -23,6 +42,199 @@ function parsePositiveInt(raw, fallback, min = 1, max = Number.MAX_SAFE_INTEGER)
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function isHttpUrl(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function encodeGamesPath(filePath) {
+  const normalized = toStringSafe(filePath).replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized) return "";
+  return normalized
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function toGameAssetRoute(filePath) {
+  const encoded = encodeGamesPath(filePath);
+  return encoded ? `/games/${encoded}` : "";
+}
+
+function resolveGameFilePath(filename) {
+  const raw = toStringSafe(filename);
+  if (!raw) return "";
+
+  const decoded = safeDecodeURIComponent(raw).replace(/\\/g, "/");
+  const candidate = path.resolve(GAMES_DIR, decoded);
+  const root = path.resolve(GAMES_DIR);
+
+  if (!candidate.startsWith(root)) {
+    return "";
+  }
+
+  return candidate;
+}
+
+function readFileSnippet(filePath, maxBytes = MAX_THUMBNAIL_SCAN_BYTES) {
+  try {
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const buffer = Buffer.alloc(maxBytes);
+      const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, 0);
+      if (bytesRead <= 0) return "";
+      return buffer.toString("utf8", 0, bytesRead);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  return "";
+}
+
+function extractThumbnailReferenceFromHtml(html) {
+  if (!html) return "";
+
+  const socialImage = firstMatch(html, [
+    /<meta[^>]+(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["'][^>]*content\s*=\s*["']([^"']+)["']/i,
+    /<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]*(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["']/i,
+  ]);
+  if (socialImage) return socialImage;
+
+  const iconHref = firstMatch(html, [
+    /<link[^>]+rel\s*=\s*["'][^"']*icon[^"']*["'][^>]*href\s*=\s*["']([^"']+)["']/i,
+    /<link[^>]+href\s*=\s*["']([^"']+)["'][^>]*rel\s*=\s*["'][^"']*icon[^"']*["']/i,
+  ]);
+  if (iconHref) return iconHref;
+
+  const imageSrc = firstMatch(html, [/<img[^>]+src\s*=\s*["']([^"']+)["']/i]);
+  if (imageSrc) return imageSrc;
+
+  const baseHref = firstMatch(html, [/<base[^>]+href\s*=\s*["']([^"']+)["']/i]);
+  if (isHttpUrl(baseHref)) {
+    try {
+      return new URL("favicon.ico", baseHref).toString();
+    } catch {
+      // fall through
+    }
+  }
+
+  const absoluteRef = firstMatch(html, [/(https?:\/\/[^\s"'<>]+)/i]);
+  if (isHttpUrl(absoluteRef)) {
+    try {
+      return `${new URL(absoluteRef).origin}/favicon.ico`;
+    } catch {
+      // fall through
+    }
+  }
+
+  return "";
+}
+
+function normalizeThumbnailReference(reference, filename) {
+  const raw = toStringSafe(reference);
+  if (!raw) return "";
+
+  if (/^data:image\//i.test(raw)) {
+    // Keep very small inline icons only to avoid oversized API payloads.
+    return raw.length <= 4096 ? raw : "";
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  if (/^\/\//.test(raw)) {
+    return `https:${raw}`;
+  }
+
+  if (/^(javascript:|about:|#)/i.test(raw)) {
+    return "";
+  }
+
+  const withoutHash = raw.split("#")[0];
+  const queryIndex = withoutHash.indexOf("?");
+  const query = queryIndex >= 0 ? withoutHash.slice(queryIndex) : "";
+  const assetPath = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+
+  const gamePath = toStringSafe(filename).replace(/\\/g, "/");
+  const gameDir = path.posix.dirname(gamePath);
+  const merged = assetPath.startsWith("/")
+    ? assetPath.slice(1)
+    : path.posix.join(gameDir === "." ? "" : gameDir, assetPath);
+
+  const normalized = path.posix.normalize(merged).replace(/^\/+/, "");
+  if (!normalized || normalized.startsWith("..")) {
+    return "";
+  }
+
+  const encoded = normalized
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  if (!encoded) {
+    return "";
+  }
+
+  return `/games/${encoded}${query}`;
+}
+
+function resolveThumbnailFromUrl(url) {
+  if (!isHttpUrl(url)) return "";
+  try {
+    return `${new URL(url).origin}/favicon.ico`;
+  } catch {
+    return "";
+  }
+}
+
+function resolveGameThumbnail(filename, configuredUrl) {
+  const cacheKey = `${toStringSafe(filename)}|${toStringSafe(configuredUrl)}`;
+  if (THUMBNAIL_CACHE.has(cacheKey)) {
+    return THUMBNAIL_CACHE.get(cacheKey);
+  }
+
+  let resolved = "";
+  const filePath = resolveGameFilePath(filename);
+  if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const snippet = readFileSnippet(filePath);
+    const reference = extractThumbnailReferenceFromHtml(snippet);
+    resolved = normalizeThumbnailReference(reference, filename);
+  }
+
+  if (!resolved) {
+    resolved = resolveThumbnailFromUrl(configuredUrl);
+  }
+
+  THUMBNAIL_CACHE.set(cacheKey, resolved);
+  return resolved;
 }
 
 function readGamesJson() {
@@ -63,9 +275,11 @@ function normalizeGame(entry, index, statsMap) {
   const name = toStringSafe(entry.name) || toStringSafe(entry.title) || `Game ${index + 1}`;
   const filename = toStringSafe(entry["original file name"]) || toStringSafe(entry.filename);
   const configuredPlayUrl = toStringSafe(entry.playUrl) || toStringSafe(entry.url);
-  const playUrl = configuredPlayUrl || (filename ? `/games/${encodeURIComponent(filename)}` : "");
+  const playUrl = configuredPlayUrl || toGameAssetRoute(filename);
   const storedPlayCount = parsePositiveInt(entry.play_count, 0, 0);
   const playCount = statsMap.has(id) ? statsMap.get(id) : storedPlayCount;
+  const explicitThumbnail = toStringSafe(entry.thumbnail);
+  const thumbnail = explicitThumbnail || resolveGameThumbnail(filename, configuredPlayUrl);
 
   return {
     id,
@@ -75,7 +289,7 @@ function normalizeGame(entry, index, statsMap) {
     playUrl,
     url: toStringSafe(entry.url),
     description: toStringSafe(entry.description),
-    thumbnail: toStringSafe(entry.thumbnail),
+    thumbnail,
     category: toStringSafe(entry.category),
     featured: toBoolean(entry.featured),
     trending: toBoolean(entry.trending),
@@ -98,6 +312,7 @@ async function getGames() {
 
 async function refreshGameCache() {
   GAME_CACHE = null;
+  THUMBNAIL_CACHE.clear();
   return getGames();
 }
 

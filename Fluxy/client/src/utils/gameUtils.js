@@ -27,10 +27,10 @@ export function generateGameThumbnail(name) {
   const cleanName = safeText(name) || "Game";
   const hash = hashString(cleanName.toLowerCase());
   const palette = THUMBNAIL_COLORS[hash % THUMBNAIL_COLORS.length];
-  const initial = cleanName[0] ? cleanName[0].toUpperCase() : "G";
   const accent = palette[0];
   const glow = palette[1];
   const bg = palette[2];
+  const title = cleanName.length > 22 ? `${cleanName.slice(0, 22)}...` : cleanName;
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
@@ -47,8 +47,15 @@ export function generateGameThumbnail(name) {
       <rect width="640" height="400" fill="url(#bg)" />
       <circle cx="320" cy="170" r="170" fill="url(#glow)" />
       <rect x="20" y="20" width="600" height="360" rx="18" fill="none" stroke="rgba(255,255,255,0.18)" />
-      <text x="320" y="230" text-anchor="middle" fill="white" opacity="0.92"
-        font-family="Arial, sans-serif" font-size="180" font-weight="700">${initial}</text>
+      <g transform="translate(320 170)">
+        <rect x="-120" y="-60" width="240" height="120" rx="34" fill="rgba(255,255,255,0.16)" />
+        <rect x="-70" y="-11" width="58" height="20" rx="10" fill="rgba(255,255,255,0.88)" />
+        <rect x="-50" y="-31" width="18" height="60" rx="9" fill="rgba(255,255,255,0.88)" />
+        <circle cx="45" cy="-10" r="12" fill="rgba(255,255,255,0.88)" />
+        <circle cx="72" cy="14" r="12" fill="rgba(255,255,255,0.88)" />
+      </g>
+      <text x="320" y="328" text-anchor="middle" fill="white" opacity="0.92"
+        font-family="Arial, sans-serif" font-size="34" font-weight="700">${title}</text>
     </svg>
   `;
 
@@ -71,21 +78,7 @@ export function getBackendOrigin() {
   if (typeof window === "undefined") {
     return "http://localhost:3001";
   }
-
-  const { protocol, hostname, port, origin } = window.location;
-
-  // GitHub/Codespaces-style forwarded hosts:
-  //   <workspace>-3000.app.github.dev (frontend)
-  //   <workspace>-3001.app.github.dev (backend)
-  if (/-3000\./.test(hostname)) {
-    return `${protocol}//${hostname.replace(/-3000\./, "-3001.")}`;
-  }
-
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001`;
-  }
-
-  return origin;
+  return window.location.origin;
 }
 
 export function resolveGameUrl(playUrl) {
